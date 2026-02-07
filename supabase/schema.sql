@@ -44,8 +44,18 @@ CREATE TABLE daily_summaries (
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   wake_up_completed BOOLEAN DEFAULT false,
+  -- Morning individual habits
+  face_washed BOOLEAN DEFAULT false,
+  phone_plugged_in BOOLEAN DEFAULT false,
+  gym_exercise BOOLEAN DEFAULT false,
+  meditation BOOLEAN DEFAULT false,
+  -- Evening individual habits
+  bible_read BOOLEAN DEFAULT false,
+  laptop_shutdown BOOLEAN DEFAULT false,
+  -- Stack completion flags
   morning_stack_complete BOOLEAN DEFAULT false,
   evening_stack_complete BOOLEAN DEFAULT false,
+  -- Other fields
   scripture_chapters_read INTEGER DEFAULT 0,
   meeting_mode BOOLEAN DEFAULT false,
   day_rating TEXT CHECK (day_rating IN ('perfect', 'partial', 'missed', 'meeting')),
@@ -140,3 +150,12 @@ CREATE TRIGGER on_auth_user_created
 CREATE INDEX idx_habit_logs_user_date ON habit_logs(user_id, date);
 CREATE INDEX idx_daily_summaries_user_date ON daily_summaries(user_id, date);
 CREATE INDEX idx_streaks_user_type ON streaks(user_id, streak_type);
+
+-- ADD NEW COLUMNS TO EXISTING TABLE (if table already exists)
+-- Run these only if you already have the table and need to add new columns:
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS face_washed BOOLEAN DEFAULT false;
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS phone_plugged_in BOOLEAN DEFAULT false;
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS gym_exercise BOOLEAN DEFAULT false;
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS meditation BOOLEAN DEFAULT false;
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS bible_read BOOLEAN DEFAULT false;
+-- ALTER TABLE daily_summaries ADD COLUMN IF NOT EXISTS laptop_shutdown BOOLEAN DEFAULT false;
