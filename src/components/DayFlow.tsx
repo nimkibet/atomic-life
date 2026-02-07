@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { DayPlan, getDayPlanForDate, insertDayPlanItem, updateDayPlanItemComplete, deleteDayPlanItem, HARDCODED_USER_ID } from '@/lib/supabase';
+import { DayPlan, getDayPlanForDate, updateDayPlanItemComplete, deleteDayPlanItem, HARDCODED_USER_ID } from '@/lib/supabase';
 import { supabase } from '@/lib/supabase';
 
 interface DayFlowProps {
@@ -11,6 +11,7 @@ interface DayFlowProps {
 /**
  * DayFlow Component - Time-Blocking Planner
  * A simplified list for planning the day's schedule
+ * Tasks persist on refresh via Supabase
  */
 export default function DayFlow({ onUpdate }: DayFlowProps) {
   const [viewMode, setViewMode] = useState<'today' | 'tomorrow'>('today');
@@ -24,8 +25,16 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
   const [newTime, setNewTime] = useState('08:00');
   const [newTask, setNewTask] = useState('');
 
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  // Get stable date reference (doesn't change on re-renders)
+  const getToday = useCallback(() => new Date().toISOString().split('T')[0], []);
+  const getTomorrow = useCallback(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  }, []);
+
+  const today = getToday();
+  const tomorrow = getTomorrow();
   const selectedDate = viewMode === 'today' ? today : tomorrow;
 
   // Fetch tasks for selected date
@@ -53,6 +62,7 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
     }
   }, [selectedDate]);
 
+  // Fetch on mount and when selectedDate changes
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
@@ -72,7 +82,7 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
       const endHours = hours + 1;
       const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
-      // Direct Supabase insert for better error handling
+      // Direct Supabase insert
       const { data, error: insertError } = await supabase
         ?.from('day_plan')
         .insert({
@@ -99,7 +109,7 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
       setSuccess('Task added!');
       setTimeout(() => setSuccess(null), 2000);
       
-      // Re-fetch tasks
+      // Re-fetch tasks to persist
       await fetchTasks();
       onUpdate?.();
     } catch (err) {
@@ -127,7 +137,7 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
     } catch (err) {
       console.error('Error updating task:', err);
       setError('Failed to update task');
-      await fetchTasks(); // Revert on error
+      await fetchTasks();
     }
   };
 
@@ -334,7 +344,6 @@ export default function DayFlow({ onUpdate }: DayFlowProps) {
               {progressPercent}%
             </span>
           </div>
-          {/* Progress bar */}
           <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
             <div
               className="h-full bg-accent-success transition-all duration-300"
