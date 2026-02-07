@@ -11,6 +11,9 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Atomic Life',
   },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export const viewport: Viewport = {
@@ -30,6 +33,9 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="bg-dark-bg text-white antialiased">
         {children}
