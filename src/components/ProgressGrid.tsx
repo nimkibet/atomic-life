@@ -15,9 +15,9 @@ interface ProgressGridProps {
 
 /**
  * ProgressGrid Component - Visual Review (GitHub-style contribution graph)
- * Shows the last 30 days of activity with click-to-view details
+ * Shows only days that have been logged (Growing History)
  * Uses HARDCODED_USER_ID for single player mode
- * Shows grey cells for days with no data (no fake/mock data)
+ * Zero State: Shows "Your journey begins tomorrow" if no logs exist
  */
 export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
   const [gridData, setGridData] = useState<DayData[]>([]);
@@ -25,54 +25,27 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
 
   const fetchData = useCallback(async () => {
     try {
-      // Calculate date range for last 30 days
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
-      const start = startDate.toISOString().split('T')[0];
-      const end = endDate.toISOString().split('T')[0];
-
       const { data, error } = await supabase
         ?.from('daily_summaries')
         .select('*')
         .eq('user_id', HARDCODED_USER_ID)
-        .gte('date', start)
-        .lte('date', end)
-        .order('date', { ascending: false }) || { data: null, error: null };
+        .order('date', { ascending: true }) || { data: null, error: null };
 
       if (error) {
         console.warn('Error fetching progress:', error.message);
       }
 
-      // Generate 30 days array - all grey (null) by default
-      const dates: string[] = [];
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        dates.push(date.toISOString().split('T')[0]);
-      }
-      
-      // Map Supabase data to our format, leaving empty days as grey (null)
-      const mappedData: DayData[] = dates.map(dateStr => {
-        const summary = data?.find((d: { date: string }) => d.date === dateStr);
-        return {
-          date: dateStr,
-          rating: (summary?.day_rating as 'perfect' | 'partial' | 'missed' | null) || null,
-          meetingMode: summary?.meeting_mode || false
-        };
-      });
-      
+      // Map directly over fetched data - no filler
+      const mappedData: DayData[] = (data || []).map(summary => ({
+        date: summary.date,
+        rating: summary.day_rating as 'perfect' | 'partial' | 'missed' | null,
+        meetingMode: summary.meeting_mode || false
+      }));
+
       setGridData(mappedData);
     } catch (err) {
       console.warn('Error fetching progress:', err);
-      // Generate empty grey cells on error
-      const dates: DayData[] = [];
-      for (let i = 29; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        dates.push({ date: date.toISOString().split('T')[0], rating: null, meetingMode: false });
-      }
-      setGridData(dates);
+      setGridData([]);
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +67,7 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
       case 'missed':
         return 'bg-dark-border';
       default:
-        return 'bg-dark-bg border border-dark-border'; // Grey for empty
+        return 'bg-dark-bg border border-dark-border';
     }
   };
 
@@ -117,17 +90,16 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
   // Calculate stats from real data
   const perfectDays = gridData.filter(d => d.rating === 'perfect').length;
   const partialDays = gridData.filter(d => d.rating === 'partial').length;
-  const missedDays = gridData.filter(d => d.rating === null && !d.meetingMode).length;
+  const missedDays = gridData.filter(d => d.rating === 'missed').length;
   const meetingDays = gridData.filter(d => d.meetingMode).length;
 
   return (
     <div className="bg-dark-card rounded-xl border border-dark-border p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">📊 30-Day Consistency</h3>
+        <h3 className="text-lg font-semibold text-white">📊 Growing History</h3>
         <div className="flex items-center gap-2 text-xs text-gray-400">
           <span>Less</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-sm bg-dark-bg border border-dark-border" title="Empty" />
             <div className="w-3 h-3 rounded-sm bg-accent-success/40" title="Partial" />
             <div className="w-3 h-3 rounded-sm bg-accent-success" title="Perfect" />
             <div className="w-3 h-3 rounded-sm bg-accent-info/60" title="Meeting Mode" />
@@ -136,17 +108,23 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         </div>
       </div>
 
-      {/* Grid Container */}
-      <div className="overflow-x-auto">
-        {isLoading ? (
-          <div className="flex gap-1 min-w-max py-2">
-            {[...Array(30)].map((_, i) => (
-              <div key={i} className="w-4 h-4 rounded-sm bg-gray-800 animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex gap-1 min-w-max">
-            <div className="flex flex-wrap gap-1 max-w-[280px]">
+      {/* Zero State */}
+      {isLoading ? (
+        <div className="flex gap-1 py-2">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="w-4 h-4 rounded-sm bg-gray-800 animate-pulse" />
+          ))}
+        </div>
+      ) : gridData.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-gray-500 text-lg">Your journey begins tomorrow</p>
+          <p className="text-gray-600 text-sm mt-2">Start logging your habits to build your history</p>
+        </div>
+      ) : (
+        <>
+          {/* Grid Container */}
+          <div className="overflow-x-auto">
+            <div className="flex gap-1 flex-wrap">
               {gridData.map((day) => (
                 <div
                   key={day.date}
@@ -157,7 +135,7 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
                     className={`
                       w-4 h-4 rounded-sm transition-all duration-200
                       ${getCellColor(day.rating, day.meetingMode)}
-                      ${day.rating || day.meetingMode ? 'hover:scale-125 cursor-pointer' : 'cursor-default'}
+                      hover:scale-125 cursor-pointer
                       focus:outline-none focus:ring-2 focus:ring-accent-success focus:ring-offset-1 focus:ring-offset-dark-bg
                     `}
                     title={`${formatDate(day.date)}: ${day.rating || 'No data'}${day.meetingMode ? ' (Meeting Mode)' : ''}`}
@@ -176,7 +154,7 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
                             ? '✅ Perfect Day' 
                             : day.rating === 'partial' 
                               ? '⚠️ Partial Day' 
-                              : '❌ No Data'}
+                              : '❌ Missed'}
                       </p>
                     </div>
                   </div>
@@ -184,30 +162,30 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
               ))}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Stats Summary */}
-      <div className="mt-4 pt-4 border-t border-dark-border">
-        <div className="flex justify-between text-sm">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-accent-success">{perfectDays}</p>
-            <p className="text-gray-400">Perfect</p>
+          {/* Stats Summary */}
+          <div className="mt-4 pt-4 border-t border-dark-border">
+            <div className="flex justify-between text-sm">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-accent-success">{perfectDays}</p>
+                <p className="text-gray-500">Perfect</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-accent-warning">{partialDays}</p>
+                <p className="text-gray-500">Partial</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-gray-500">{missedDays}</p>
+                <p className="text-gray-500">Missed</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-accent-info">{meetingDays}</p>
+                <p className="text-gray-500">Meetings</p>
+              </div>
+            </div>
           </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-accent-warning">{partialDays}</p>
-            <p className="text-gray-400">Partial</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-500">{missedDays}</p>
-            <p className="text-gray-400">Empty</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-accent-info">{meetingDays}</p>
-            <p className="text-gray-400">Meetings</p>
-          </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }
