@@ -17,34 +17,15 @@ interface ProgressGridProps {
  * ProgressGrid Component - Visual Review (GitHub-style contribution graph)
  * Shows the last 30 days of activity with click-to-view details
  * Uses HARDCODED_USER_ID for single player mode
+ * Shows grey cells for days with no data (no fake/mock data)
  */
 export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
   const [gridData, setGridData] = useState<DayData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data for demo/fallback
-  const generateMockData = useCallback((): DayData[] => {
-    const dates: DayData[] = [];
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      const daysAgo = 29 - i;
-      const random = Math.random();
-      
-      if (daysAgo === 0) dates.push({ date: dateStr, rating: 'perfect', meetingMode: false });
-      else if (daysAgo === 1) dates.push({ date: dateStr, rating: 'partial', meetingMode: false });
-      else if (daysAgo === 2) dates.push({ date: dateStr, rating: null, meetingMode: true });
-      else if (random > 0.7) dates.push({ date: dateStr, rating: 'partial', meetingMode: false });
-      else if (random > 0.3) dates.push({ date: dateStr, rating: 'perfect', meetingMode: false });
-      else dates.push({ date: dateStr, rating: null, meetingMode: false });
-    }
-    return dates;
-  }, []);
-
   const fetchData = useCallback(async () => {
     try {
-      // Query Supabase directly for recent summaries
+      // Calculate date range for last 30 days
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
@@ -60,36 +41,42 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         .order('date', { ascending: false }) || { data: null, error: null };
 
       if (error) {
-        console.warn('Using mock data:', error.message);
-        setGridData(generateMockData());
-      } else if (data && Array.isArray(data) && data.length > 0) {
-        // Map Supabase data to our format
-        const dates: string[] = [];
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          dates.push(date.toISOString().split('T')[0]);
-        }
-        
-        const mappedData: DayData[] = dates.map(dateStr => {
-          const summary = data.find((d: { date: string }) => d.date === dateStr);
-          return {
-            date: dateStr,
-            rating: summary?.day_rating as 'perfect' | 'partial' | 'missed' | null,
-            meetingMode: summary?.meeting_mode || false
-          };
-        });
-        setGridData(mappedData);
-      } else {
-        setGridData(generateMockData());
+        console.warn('Error fetching progress:', error.message);
       }
+
+      // Generate 30 days array - all grey (null) by default
+      const dates: string[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        dates.push(date.toISOString().split('T')[0]);
+      }
+      
+      // Map Supabase data to our format, leaving empty days as grey (null)
+      const mappedData: DayData[] = dates.map(dateStr => {
+        const summary = data?.find((d: { date: string }) => d.date === dateStr);
+        return {
+          date: dateStr,
+          rating: (summary?.day_rating as 'perfect' | 'partial' | 'missed' | null) || null,
+          meetingMode: summary?.meeting_mode || false
+        };
+      });
+      
+      setGridData(mappedData);
     } catch (err) {
       console.warn('Error fetching progress:', err);
-      setGridData(generateMockData());
+      // Generate empty grey cells on error
+      const dates: DayData[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        dates.push({ date: date.toISOString().split('T')[0], rating: null, meetingMode: false });
+      }
+      setGridData(dates);
     } finally {
       setIsLoading(false);
     }
-  }, [generateMockData]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -107,7 +94,7 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
       case 'missed':
         return 'bg-dark-border';
       default:
-        return 'bg-dark-bg border border-dark-border';
+        return 'bg-dark-bg border border-dark-border'; // Grey for empty
     }
   };
 
@@ -127,6 +114,12 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
     }
   };
 
+  // Calculate stats from real data
+  const perfectDays = gridData.filter(d => d.rating === 'perfect').length;
+  const partialDays = gridData.filter(d => d.rating === 'partial').length;
+  const missedDays = gridData.filter(d => d.rating === null && !d.meetingMode).length;
+  const meetingDays = gridData.filter(d => d.meetingMode).length;
+
   return (
     <div className="bg-dark-card rounded-xl border border-dark-border p-6">
       <div className="flex items-center justify-between mb-4">
@@ -134,9 +127,9 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         <div className="flex items-center gap-2 text-xs text-gray-400">
           <span>Less</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-sm bg-dark-bg border border-dark-border" />
-            <div className="w-3 h-3 rounded-sm bg-accent-success/40" />
-            <div className="w-3 h-3 rounded-sm bg-accent-success" />
+            <div className="w-3 h-3 rounded-sm bg-dark-bg border border-dark-border" title="Empty" />
+            <div className="w-3 h-3 rounded-sm bg-accent-success/40" title="Partial" />
+            <div className="w-3 h-3 rounded-sm bg-accent-success" title="Perfect" />
             <div className="w-3 h-3 rounded-sm bg-accent-info/60" title="Meeting Mode" />
           </div>
           <span>More</span>
@@ -183,7 +176,7 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
                             ? '✅ Perfect Day' 
                             : day.rating === 'partial' 
                               ? '⚠️ Partial Day' 
-                              : '❌ Missed'}
+                              : '❌ No Data'}
                       </p>
                     </div>
                   </div>
@@ -198,27 +191,19 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
       <div className="mt-4 pt-4 border-t border-dark-border">
         <div className="flex justify-between text-sm">
           <div className="text-center">
-            <p className="text-2xl font-bold text-accent-success">
-              {gridData.filter(d => d.rating === 'perfect').length}
-            </p>
+            <p className="text-2xl font-bold text-accent-success">{perfectDays}</p>
             <p className="text-gray-400">Perfect</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-accent-warning">
-              {gridData.filter(d => d.rating === 'partial').length}
-            </p>
+            <p className="text-2xl font-bold text-accent-warning">{partialDays}</p>
             <p className="text-gray-400">Partial</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-gray-500">
-              {gridData.filter(d => d.rating === null && !d.meetingMode).length}
-            </p>
-            <p className="text-gray-400">Missed</p>
+            <p className="text-2xl font-bold text-gray-500">{missedDays}</p>
+            <p className="text-gray-400">Empty</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-accent-info">
-              {gridData.filter(d => d.meetingMode).length}
-            </p>
+            <p className="text-2xl font-bold text-accent-info">{meetingDays}</p>
             <p className="text-gray-400">Meetings</p>
           </div>
         </div>
