@@ -9,6 +9,8 @@ interface HabitStacksProps {
 
 interface DailySummary {
   id: string;
+  user_id: string;
+  date: string;
   morning_stack_complete: boolean;
   evening_stack_complete: boolean;
   meeting_mode: boolean;
@@ -25,16 +27,48 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
 
   const today = new Date().toISOString().split('T')[0];
 
+  // Morning habits checklist
+  const morningHabits = [
+    { id: 'face', label: 'Face Washed (The Jolt)', emoji: '💧' },
+    { id: 'phone', label: 'Phone Plugged In (The Setup)', emoji: '📱' },
+    { id: 'gym', label: '30m Gym/Exercise (The Body)', emoji: '💪' },
+    { id: 'meditation', label: 'Meditation (The Mind)', emoji: '🧘' },
+  ];
+
+  // Evening habits checklist
+  const eveningHabits = [
+    { id: 'bible', label: 'Bible Read (The Spirit)', emoji: '📖' },
+    { id: 'shutdown', label: '10 PM Laptop Shutdown (The Discipline)', emoji: '🔒' },
+  ];
+
+  // Calculate completion percentage for a stack
+  const calculateProgress = (stackComplete: boolean | undefined): number => {
+    return stackComplete ? 100 : 0;
+  };
+
+  // Calculate overall completion percentage
+  const calculateOverallProgress = (): number => {
+    const morningComplete = summary?.morning_stack_complete ? 50 : 0;
+    const eveningComplete = summary?.evening_stack_complete ? 50 : 0;
+    return morningComplete + eveningComplete;
+  };
+
   // Fetch today's summary using HARDCODED_USER_ID
   const fetchTodaySummary = async () => {
+    if (!supabase) {
+      console.warn('Supabase client not initialized');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
-        ?.from('daily_summaries')
+        .from('daily_summaries')
         .select('*')
         .eq('user_id', HARDCODED_USER_ID)
         .eq('date', today)
-        .single() || { data: null, error: null };
-      
+        .single();
+
       if (error && error.code !== 'PGRST116') {
         console.warn('Error fetching summary:', error);
       }
@@ -42,23 +76,23 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       if (data) {
         setSummary(data as DailySummary);
       } else {
-        // No row exists, create one with direct Supabase query
+        // No row exists, create one
         const { data: newSummary, error: insertError } = await supabase
-          ?.from('daily_summaries')
-          .upsert({ 
-            user_id: HARDCODED_USER_ID, 
-            date: today, 
+          .from('daily_summaries')
+          .upsert({
+            user_id: HARDCODED_USER_ID,
+            date: today,
             morning_stack_complete: false,
             evening_stack_complete: false,
-            meeting_mode: false 
+            meeting_mode: false
           }, { onConflict: 'user_id,date' })
           .select()
-          .single() || { data: null, error: null };
-        
+          .single();
+
         if (insertError) {
           console.warn('Error creating summary:', insertError);
         } else if (newSummary) {
-          setSummary(newSummary);
+          setSummary(newSummary as DailySummary);
         }
       }
     } catch (err) {
@@ -74,58 +108,62 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
 
   // Toggle a stack completion status
   const toggleStack = async (stackType: 'morning' | 'evening') => {
-    if (!summary || isUpdating) return;
+    if (isUpdating || !supabase) return;
 
     setIsUpdating(true);
+
     try {
-      const updates = {
-        [stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete']: 
-          !summary[stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete']
-      };
+      // Determine the new value based on current state
+      const currentValue = stackType === 'morning'
+        ? summary?.morning_stack_complete
+        : summary?.evening_stack_complete;
+      const newValue = !currentValue;
 
-      // Update with direct Supabase query
-      const { error } = await supabase
-        ?.from('daily_summaries')
-        .upsert({ 
-          user_id: HARDCODED_USER_ID, 
-          date: today, 
-          ...updates 
-        }, { onConflict: 'user_id,date' })
-        .select()
-        .single() || { error: null };
-      
-      if (error) throw error;
+      const fieldName = stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete';
 
-      // Optimistically update local state
+      // Optimistically update local state for instant feedback
       setSummary(prev => prev ? {
         ...prev,
-        [stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete']:
-          !prev[stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete']
-      } : null);
+        [fieldName]: newValue
+      } : {
+        id: '',
+        user_id: HARDCODED_USER_ID,
+        date: today,
+        morning_stack_complete: stackType === 'morning' ? newValue : false,
+        evening_stack_complete: stackType === 'evening' ? newValue : false,
+        meeting_mode: false
+      });
 
-      onUpdate?.();
+      // Upsert to database - ensures row exists before updating
+      const { error } = await supabase
+        .from('daily_summaries')
+        .upsert({
+          user_id: HARDCODED_USER_ID,
+          date: today,
+          id: summary?.id,
+          [fieldName]: newValue
+        }, { onConflict: 'user_id,date' })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating stack:', error);
+        // Revert to correct state by refetching
+        await fetchTodaySummary();
+      } else {
+        onUpdate?.();
+      }
     } catch (err) {
       console.error('Error updating stack:', err);
-      // Refetch to restore correct state
       await fetchTodaySummary();
     } finally {
       setIsUpdating(false);
     }
   };
 
-  // Morning habits checklist
-  const morningHabits = [
-    { id: 'face', label: 'Face Washed (The Jolt)', emoji: '💧' },
-    { id: 'phone', label: 'Phone Plugged In (The Setup)', emoji: '📱' },
-    { id: 'gym', label: '30m Gym/Exercise (The Body)', emoji: '💪' },
-    { id: 'meditation', label: 'Meditation (The Mind)', emoji: '🧘' },
-  ];
-
-  // Evening habits checklist
-  const eveningHabits = [
-    { id: 'bible', label: 'Bible Read (The Spirit)', emoji: '📖' },
-    { id: 'shutdown', label: '10 PM Laptop Shutdown (The Discipline)', emoji: '🔒' },
-  ];
+  const overallProgress = calculateOverallProgress();
+  const morningProgress = calculateProgress(summary?.morning_stack_complete);
+  const eveningProgress = calculateProgress(summary?.evening_stack_complete);
 
   if (isLoading) {
     return (
@@ -144,9 +182,21 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
 
   return (
     <div className="bg-dark-card rounded-xl border border-dark-border p-6">
-      <h2 className="text-lg font-semibold text-gray-400 mb-6 uppercase tracking-wider">
-        📋 Habit Stacks
-      </h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-lg font-semibold text-gray-400 uppercase tracking-wider">
+          📋 Habit Stacks
+        </h2>
+        {/* Progress Bar */}
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{overallProgress}%</span>
+          <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-accent-success to-emerald-400 transition-all duration-300"
+              style={{ width: `${overallProgress}%` }}
+            />
+          </div>
+        </div>
+      </div>
 
       {/* Meeting Mode Notice */}
       {summary?.meeting_mode && (
@@ -158,12 +208,15 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       <div className="space-y-8">
         {/* Morning Stack */}
         <div>
-          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-            🌅 Morning Stack
-            {summary?.morning_stack_complete && (
-              <span className="text-sm text-accent-success">✓ Complete</span>
-            )}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              🌅 Morning Stack
+              {summary?.morning_stack_complete && (
+                <span className="text-sm text-accent-success">✓ Complete</span>
+              )}
+            </h3>
+            <span className="text-sm text-gray-400">{morningProgress}%</span>
+          </div>
           <div className="space-y-3">
             {morningHabits.map((habit) => (
               <label
@@ -182,7 +235,7 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
                   onChange={() => toggleStack('morning')}
                   disabled={isUpdating}
                   className="w-6 h-6 rounded border-gray-600 bg-gray-700 
-                    text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg"
+                    text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg cursor-pointer"
                 />
                 <span className="text-xl">{habit.emoji}</span>
                 <span className={`text-white ${summary?.morning_stack_complete ? 'line-through opacity-60' : ''}`}>
@@ -195,12 +248,15 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
 
         {/* Evening Stack */}
         <div>
-          <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-            🌙 Evening Stack
-            {summary?.evening_stack_complete && (
-              <span className="text-sm text-accent-success">✓ Complete</span>
-            )}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              🌙 Evening Stack
+              {summary?.evening_stack_complete && (
+                <span className="text-sm text-accent-success">✓ Complete</span>
+              )}
+            </h3>
+            <span className="text-sm text-gray-400">{eveningProgress}%</span>
+          </div>
           <div className="space-y-3">
             {eveningHabits.map((habit) => (
               <label
@@ -219,7 +275,7 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
                   onChange={() => toggleStack('evening')}
                   disabled={isUpdating}
                   className="w-6 h-6 rounded border-gray-600 bg-gray-700 
-                    text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg"
+                    text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg cursor-pointer"
                 />
                 <span className="text-xl">{habit.emoji}</span>
                 <span className={`text-white ${summary?.evening_stack_complete ? 'line-through opacity-60' : ''}`}>
