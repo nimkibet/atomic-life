@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getTodaySummary, getReadingLogsForDate } from '@/lib/supabase';
+import { supabase, HARDCODED_USER_ID } from '@/lib/supabase';
 
 interface DailyDetailModalProps {
   date: Date;
@@ -48,23 +48,33 @@ export default function DailyDetailModal({ date, onClose }: DailyDetailModalProp
       setError(null);
 
       try {
-        // Fetch daily summary
-        const { data: summaryData, error: summaryError } = await getTodaySummary(dateString);
-        
+        // Query Supabase directly for daily summary
+        const { data: summaryData, error: summaryError } = await supabase
+          ?.from('daily_summaries')
+          .select('*')
+          .eq('user_id', HARDCODED_USER_ID)
+          .eq('date', dateString)
+          .single() || { data: null, error: null };
+
         if (summaryError && summaryError.code !== 'PGRST116') {
           console.warn('Summary error:', summaryError);
         }
 
-        setSummary(summaryData || null);
+        setSummary(summaryData as DailySummary | null);
 
-        // Fetch reading logs
-        const { data: readingData, error: readingError } = await getReadingLogsForDate(dateString);
-        
+        // Query Supabase directly for reading logs
+        const { data: readingData, error: readingError } = await supabase
+          ?.from('reading_logs')
+          .select('*')
+          .eq('user_id', HARDCODED_USER_ID)
+          .eq('date', dateString)
+          .order('created_at', { ascending: false }) || { data: [], error: null };
+
         if (readingError) {
           console.warn('Reading logs error:', readingError);
         }
 
-        setReadingLogs(readingData || []);
+        setReadingLogs((readingData as ReadingLog[]) || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
@@ -104,169 +114,98 @@ export default function DailyDetailModal({ date, onClose }: DailyDetailModalProp
         {/* Content */}
         <div className="p-6 pt-4 space-y-6">
           {isLoading ? (
-            // Loading skeleton
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="h-4 bg-gray-800 rounded w-1/3 mb-2"></div>
-                  <div className="h-12 bg-gray-800 rounded"></div>
-                </div>
-              ))}
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-success"></div>
             </div>
           ) : error ? (
-            // Error state
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-red-400 text-sm">{error}</p>
+            <div className="text-center py-8">
+              <p className="text-red-400">{error}</p>
             </div>
           ) : (
             <>
-              {/* Morning Victory Section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  🌅 Morning Victory
-                </h3>
-                <div className={`p-4 rounded-lg border ${
-                  summary?.wake_up_completed 
-                    ? 'bg-green-500/10 border-green-500/20' 
-                    : 'bg-gray-800/50 border-gray-700'
-                }`}>
-                  {summary?.wake_up_completed ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">✅</span>
-                      <div>
-                        <p className="text-green-400 font-semibold">Victory Secured!</p>
-                        <p className="text-gray-400 text-sm">You won the morning</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">❌</span>
-                      <div>
-                        <p className="text-gray-400 font-semibold">Window Missed</p>
-                        <p className="text-gray-500 text-sm">Try again tomorrow</p>
-                      </div>
-                    </div>
-                  )}
+              {/* Day Rating */}
+              {summary?.day_rating && (
+                <div className="flex items-center justify-center">
+                  <span className={`px-4 py-2 rounded-full text-sm font-semibold
+                    ${summary.day_rating === 'perfect' ? 'bg-accent-success/20 text-accent-success' :
+                      summary.day_rating === 'partial' ? 'bg-accent-warning/20 text-accent-warning' :
+                      summary.day_rating === 'meeting' ? 'bg-accent-info/20 text-accent-info' :
+                      'bg-gray-700 text-gray-400'}`}>
+                    {summary.day_rating === 'perfect' ? '🌟 Perfect Day' :
+                      summary.day_rating === 'partial' ? '📉 Partial Day' :
+                      summary.day_rating === 'meeting' ? '📅 Meeting Mode Day' :
+                      '❌ Missed Day'}
+                  </span>
                 </div>
-              </div>
+              )}
 
-              {/* Habit Stacks Section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  📋 Habit Stacks
-                </h3>
-                <div className="space-y-3">
-                  {/* Morning Stack */}
-                  <div className={`p-4 rounded-lg border ${
-                    summary?.morning_stack_complete
-                      ? 'bg-green-500/10 border-green-500/20'
-                      : 'bg-gray-800/50 border-gray-700'
+              {/* Habits Checklist */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-white">✅ Habits</h3>
+                <div className="space-y-2">
+                  <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                    summary?.wake_up_completed ? 'bg-accent-success/10' : 'bg-gray-800/50'
                   }`}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{summary?.morning_stack_complete ? '✅' : '⬜'}</span>
-                      <div>
-                        <p className="text-white font-medium">Morning Stack</p>
-                        <p className="text-gray-400 text-sm">
-                          {summary?.morning_stack_complete ? 'All completed' : 'Not yet completed'}
-                        </p>
-                      </div>
-                    </div>
+                    <span className="text-lg">{summary?.wake_up_completed ? '✅' : '⬜'}</span>
+                    <span className={summary?.wake_up_completed ? 'text-white' : 'text-gray-500'}>
+                      6 AM Victory
+                    </span>
                   </div>
-
-                  {/* Evening Stack */}
-                  <div className={`p-4 rounded-lg border ${
-                    summary?.evening_stack_complete
-                      ? 'bg-green-500/10 border-green-500/20'
-                      : 'bg-gray-800/50 border-gray-700'
+                  <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                    summary?.morning_stack_complete ? 'bg-accent-success/10' : 'bg-gray-800/50'
                   }`}>
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{summary?.evening_stack_complete ? '✅' : '⬜'}</span>
-                      <div>
-                        <p className="text-white font-medium">Evening Stack</p>
-                        <p className="text-gray-400 text-sm">
-                          {summary?.evening_stack_complete ? 'All completed' : 'Not yet completed'}
-                        </p>
-                      </div>
-                    </div>
+                    <span className="text-lg">{summary?.morning_stack_complete ? '✅' : '⬜'}</span>
+                    <span className={summary?.morning_stack_complete ? 'text-white' : 'text-gray-500'}>
+                      Morning Stack
+                    </span>
                   </div>
-
-                  {/* Meeting Mode Badge */}
+                  <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                    summary?.evening_stack_complete ? 'bg-accent-success/10' : 'bg-gray-800/50'
+                  }`}>
+                    <span className="text-lg">{summary?.evening_stack_complete ? '✅' : '⬜'}</span>
+                    <span className={summary?.evening_stack_complete ? 'text-white' : 'text-gray-500'}>
+                      Evening Stack
+                    </span>
+                  </div>
                   {summary?.meeting_mode && (
-                    <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">🔵</span>
-                        <p className="text-blue-400 text-sm font-medium">Meeting Mode Active</p>
-                      </div>
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-accent-info/10">
+                      <span className="text-lg">📅</span>
+                      <span className="text-accent-info">Meeting Mode Active</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Knowledge Hunt Section */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                  📚 Knowledge Hunt
-                </h3>
+              {/* Scripture Reading */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-semibold text-white">📖 Scripture</h3>
                 {readingLogs.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {readingLogs.map((log, index) => (
-                      <div key={index} className="p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
+                      <div key={index} className="bg-gray-800/50 p-3 rounded-lg">
+                        <div className="flex justify-between items-start">
                           <span className="text-white font-medium">{log.book_title}</span>
-                          <span className="text-gray-400 text-sm">Ch. {log.chapters_read}</span>
+                          <span className="text-accent-success text-sm">+{log.chapters_read} chapter{log.chapters_read > 1 ? 's' : ''}</span>
                         </div>
                         {log.key_learning && (
-                          <p className="text-gray-300 text-sm italic">"{log.key_learning}"</p>
+                          <p className="text-gray-400 text-sm mt-2 italic">"{log.key_learning}"</p>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-                    <p className="text-gray-500 text-sm text-center">No reading logged this day</p>
-                  </div>
+                  <p className="text-gray-500 text-sm">No scripture reading logged</p>
                 )}
               </div>
-
-              {/* Day Rating */}
-              {summary?.day_rating && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    ⭐ Day Rating
-                  </h3>
-                  <div className={`p-4 rounded-lg border ${
-                    summary.day_rating === 'perfect'
-                      ? 'bg-green-500/10 border-green-500/20'
-                      : summary.day_rating === 'partial'
-                        ? 'bg-yellow-500/10 border-yellow-500/20'
-                        : 'bg-red-500/10 border-red-500/20'
-                  }`}>
-                    <p className={`font-medium ${
-                      summary.day_rating === 'perfect'
-                        ? 'text-green-400'
-                        : summary.day_rating === 'partial'
-                          ? 'text-yellow-400'
-                          : 'text-red-400'
-                    }`}>
-                      {summary.day_rating === 'perfect'
-                        ? '🌟 Perfect Day'
-                        : summary.day_rating === 'partial'
-                          ? '⚠️ Partial Day'
-                          : '❌ Missed Day'}
-                    </p>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-[#151520] border-t border-gray-800 p-4">
+        <div className="sticky bottom-0 bg-[#151520] border-t border-gray-800 p-4 pt-3">
           <button
             onClick={onClose}
-            className="w-full py-3 px-6 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg
-              transition-colors duration-200"
+            className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-xl transition-colors"
           >
             Close
           </button>

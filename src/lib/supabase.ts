@@ -108,7 +108,7 @@ export interface DayPlan {
  * Get today's summary for the hardcoded user
  */
 export async function getTodaySummary(date: string) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('daily_summaries')
     .select('*')
@@ -121,7 +121,7 @@ export async function getTodaySummary(date: string) {
  * Upsert daily summary for the hardcoded user
  */
 export async function upsertDailySummary(date: string, updates: Partial<DailySummary>) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('daily_summaries')
     .upsert({ user_id: HARDCODED_USER_ID, date, ...updates }, { onConflict: 'user_id,date' })
@@ -133,7 +133,7 @@ export async function upsertDailySummary(date: string, updates: Partial<DailySum
  * Get summaries for the last N days for the hardcoded user
  */
 export async function getRecentSummaries(days: number = 30) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   
   // Calculate date range
   const endDate = new Date();
@@ -161,7 +161,7 @@ export async function insertReadingLog(log: {
   key_learning: string;
   date: string;
 }) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('reading_logs')
     .insert({
@@ -176,7 +176,7 @@ export async function insertReadingLog(log: {
  * Get reading logs for a specific date
  */
 export async function getReadingLogsForDate(date: string) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('reading_logs')
     .select('*')
@@ -189,7 +189,7 @@ export async function getReadingLogsForDate(date: string) {
  * Update scripture chapters count
  */
 export async function updateScriptureChapters(date: string, chaptersToAdd: number) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   
   // First get current value
   const { data: current } = await supabase
@@ -218,7 +218,7 @@ export async function updateScriptureChapters(date: string, chaptersToAdd: numbe
  * Get day plan items for a specific date
  */
 export async function getDayPlanForDate(date: string) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('day_plan')
     .select('*')
@@ -236,7 +236,7 @@ export async function insertDayPlanItem(item: {
   end_time: string;
   date: string;
 }) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('day_plan')
     .insert({
@@ -252,7 +252,7 @@ export async function insertDayPlanItem(item: {
  * Update day plan item completion status
  */
 export async function updateDayPlanItemComplete(id: string, isComplete: boolean) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('day_plan')
     .update({ is_complete: isComplete })
@@ -266,7 +266,7 @@ export async function updateDayPlanItemComplete(id: string, isComplete: boolean)
  * Delete a day plan item
  */
 export async function deleteDayPlanItem(id: string) {
-  if (!supabase) return null;
+  if (!supabase) return { data: null, error: null };
   return supabase
     .from('day_plan')
     .delete()

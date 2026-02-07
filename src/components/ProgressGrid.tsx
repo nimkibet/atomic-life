@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getRecentSummaries } from '@/lib/supabase';
+import { supabase, HARDCODED_USER_ID } from '@/lib/supabase';
 
 interface DayData {
   date: string;
@@ -44,12 +44,25 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
 
   const fetchData = useCallback(async () => {
     try {
-      const { data, error } = await getRecentSummaries(30);
+      // Query Supabase directly for recent summaries
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      const start = startDate.toISOString().split('T')[0];
+      const end = endDate.toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        ?.from('daily_summaries')
+        .select('*')
+        .eq('user_id', HARDCODED_USER_ID)
+        .gte('date', start)
+        .lte('date', end)
+        .order('date', { ascending: false }) || { data: null, error: null };
 
       if (error) {
         console.warn('Using mock data:', error.message);
         setGridData(generateMockData());
-      } else if (data && data.length > 0) {
+      } else if (data && Array.isArray(data) && data.length > 0) {
         // Map Supabase data to our format
         const dates: string[] = [];
         for (let i = 29; i >= 0; i--) {

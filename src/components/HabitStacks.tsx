@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase, upsertDailySummary, getTodaySummary } from '@/lib/supabase';
+import { supabase, HARDCODED_USER_ID } from '@/lib/supabase';
 
 interface HabitStacksProps {
   onUpdate?: () => void;
@@ -28,21 +28,32 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
   // Fetch today's summary using HARDCODED_USER_ID
   const fetchTodaySummary = async () => {
     try {
-      const { data, error } = await getTodaySummary(today);
+      const { data, error } = await supabase
+        ?.from('daily_summaries')
+        .select('*')
+        .eq('user_id', HARDCODED_USER_ID)
+        .eq('date', today)
+        .single() || { data: null, error: null };
       
       if (error && error.code !== 'PGRST116') {
         console.warn('Error fetching summary:', error);
       }
 
       if (data) {
-        setSummary(data);
+        setSummary(data as DailySummary);
       } else {
-        // No row exists, create one
-        const { data: newSummary, error: insertError } = await upsertDailySummary(today, {
-          morning_stack_complete: false,
-          evening_stack_complete: false,
-          meeting_mode: false
-        });
+        // No row exists, create one with direct Supabase query
+        const { data: newSummary, error: insertError } = await supabase
+          ?.from('daily_summaries')
+          .upsert({ 
+            user_id: HARDCODED_USER_ID, 
+            date: today, 
+            morning_stack_complete: false,
+            evening_stack_complete: false,
+            meeting_mode: false 
+          }, { onConflict: 'user_id,date' })
+          .select()
+          .single() || { data: null, error: null };
         
         if (insertError) {
           console.warn('Error creating summary:', insertError);
@@ -72,7 +83,16 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
           !summary[stackType === 'morning' ? 'morning_stack_complete' : 'evening_stack_complete']
       };
 
-      const { data, error } = await upsertDailySummary(today, updates);
+      // Update with direct Supabase query
+      const { error } = await supabase
+        ?.from('daily_summaries')
+        .upsert({ 
+          user_id: HARDCODED_USER_ID, 
+          date: today, 
+          ...updates 
+        }, { onConflict: 'user_id,date' })
+        .select()
+        .single() || { error: null };
       
       if (error) throw error;
 
