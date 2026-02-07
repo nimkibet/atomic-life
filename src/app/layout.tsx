@@ -1,12 +1,24 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Atomic Life - Personal Habit Dashboard',
-  description: 'Build better habits, one atom at a time. Based on Atomic Habits by James Clear.',
+  title: 'Atomic Life',
+  description: 'Build Better Habits - Personal Habit Dashboard based on Atomic Habits by James Clear.',
   manifest: '/manifest.json',
-  themeColor: '#10b981',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no',
+  themeColor: '#151520',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Atomic Life',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#151520',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
