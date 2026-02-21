@@ -66,8 +66,36 @@ const getInitialState = (): HabitState => ({
 export default function HabitStacks({ onUpdate }: HabitStacksProps) {
   const today = new Date().toISOString().split('T')[0];
 
-  // Load initial state from localStorage synchronously
-  const getInitialStateFromStorage = (): HabitState => {
+  // Initialize with false to prevent Next.js hydration mismatch
+  const [habitState, setHabitState] = useState<HabitState>(getInitialState);
+  const [dbSummary, setDbSummary] = useState<DailySummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  // Load from localStorage on mount (runs once)
+  useEffect(() => {
+    try {
+      const key = getTodayKey();
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setHabitState({
+          face_washed: Boolean(parsed.face_washed),
+          phone_plugged_in: Boolean(parsed.phone_plugged_in),
+          gym_exercise: Boolean(parsed.gym_exercise),
+          meditation: Boolean(parsed.meditation),
+          bible_read: Boolean(parsed.bible_read),
+          laptop_shutdown: Boolean(parsed.laptop_shutdown),
+        });
+      }
+    } catch (err) {
+      console.warn('Error loading from localStorage:', err);
+    }
+  }, []);
+
+  // Load from localStorage (for updates)
+  const loadFromLocalStorage = useCallback((): HabitState => {
     try {
       const key = getTodayKey();
       const stored = localStorage.getItem(key);
@@ -86,17 +114,6 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       console.warn('Error loading from localStorage:', err);
     }
     return getInitialState();
-  };
-
-  const [habitState, setHabitState] = useState<HabitState>(getInitialStateFromStorage);
-  const [dbSummary, setDbSummary] = useState<DailySummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [hasHydrated, setHasHydrated] = useState(false);
-
-  // Load from localStorage (for updates)
-  const loadFromLocalStorage = useCallback((): HabitState => {
-    return getInitialStateFromStorage();
   }, []);
 
   // Save to localStorage

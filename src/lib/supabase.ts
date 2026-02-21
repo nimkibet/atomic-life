@@ -154,6 +154,7 @@ export async function getRecentSummaries(days: number = 30) {
 
 /**
  * Insert a reading log for the hardcoded user
+ * Uses upsert to handle duplicate entries for same book on same day
  */
 export async function insertReadingLog(log: {
   user_id?: string;
@@ -165,13 +166,13 @@ export async function insertReadingLog(log: {
   if (!supabase) return { data: null, error: null };
   return supabase
     .from('reading_logs')
-    .insert({
+    .upsert({
       user_id: log.user_id || HARDCODED_USER_ID,
       book_title: log.book_title,
       chapters_read: log.chapters_read,
       key_learning: log.key_learning,
       date: log.date
-    })
+    }, { onConflict: 'user_id,date,book_title' })
     .select()
     .single();
 }
