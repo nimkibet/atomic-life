@@ -246,28 +246,28 @@ export default function ReadingLog({ onLogAdded }: ReadingLogProps) {
           </p>
         ) : (
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {recentLogs.map((log) => (
+            {(recentLogs || []).filter(Boolean).map((log) => (
               <div 
-                key={log.id} 
+                key={log?.id || Math.random()} 
                 className="p-3 bg-gray-800/30 rounded-lg border border-dark-border/50 hover:border-dark-border transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-medium truncate">
-                      {log.book_title}
+                      {log?.book_title || 'Unknown Book'}
                     </p>
                     <p className="text-accent-success text-sm">
-                      {log.chapters_read} {log.chapters_read === 1 ? 'Chapter' : 'Chapters'}
+                      {log?.chapters_read || 0} {log?.chapters_read === 1 ? 'Chapter' : 'Chapters'}
                     </p>
                   </div>
                   <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {new Date(log.created_at).toLocaleTimeString('en-US', { 
+                    {log?.created_at ? new Date(log.created_at).toLocaleTimeString('en-US', { 
                       hour: 'numeric', 
                       minute: '2-digit'
-                    })}
+                    }) : ''}
                   </span>
                 </div>
-                {log.key_learning && (
+                {log?.key_learning && (
                   <p className="text-gray-400 text-sm mt-2 line-clamp-2">
                     "{log.key_learning}"
                   </p>

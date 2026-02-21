@@ -64,22 +64,15 @@ const getInitialState = (): HabitState => ({
  * HabitStacks Component - Individual habit checkboxes with localStorage persistence
  */
 export default function HabitStacks({ onUpdate }: HabitStacksProps) {
-  const [habitState, setHabitState] = useState<HabitState>(getInitialState);
-  const [dbSummary, setDbSummary] = useState<DailySummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [hasHydrated, setHasHydrated] = useState(false);
-
   const today = new Date().toISOString().split('T')[0];
 
-  // Load from localStorage
-  const loadFromLocalStorage = useCallback((): HabitState => {
+  // Load initial state from localStorage synchronously
+  const getInitialStateFromStorage = (): HabitState => {
     try {
       const key = getTodayKey();
       const stored = localStorage.getItem(key);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Ensure all fields are booleans
         return {
           face_washed: Boolean(parsed.face_washed),
           phone_plugged_in: Boolean(parsed.phone_plugged_in),
@@ -93,6 +86,17 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       console.warn('Error loading from localStorage:', err);
     }
     return getInitialState();
+  };
+
+  const [habitState, setHabitState] = useState<HabitState>(getInitialStateFromStorage);
+  const [dbSummary, setDbSummary] = useState<DailySummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
+
+  // Load from localStorage (for updates)
+  const loadFromLocalStorage = useCallback((): HabitState => {
+    return getInitialStateFromStorage();
   }, []);
 
   // Save to localStorage
