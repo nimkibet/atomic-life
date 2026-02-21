@@ -1,7 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { insertReadingLog, updateScriptureChapters } from '@/lib/supabase';
+import { useState, useEffect } from 'react';
+import { insertReadingLog, updateScriptureChapters, getReadingLogsForDate, HARDCODED_USER_ID } from '@/lib/supabase';
+
+interface ReadingLogEntry {
+  id: string;
+  book_title: string;
+  chapters_read: number;
+  key_learning: string;
+  date: string;
+  created_at: string;
+}
 
 interface ReadingLogProps {
   onLogAdded?: () => void;
@@ -20,6 +29,31 @@ export default function ReadingLog({ onLogAdded }: ReadingLogProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentLogs, setRecentLogs] = useState<ReadingLogEntry[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(true);
+
+  // Fetch today's reading logs
+  const fetchTodayLogs = async () => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error: fetchError } = await getReadingLogsForDate(today);
+      
+      if (fetchError) {
+        console.warn('Error fetching logs:', fetchError);
+      } else if (data) {
+        setRecentLogs(data as ReadingLogEntry[]);
+      }
+    } catch (err) {
+      console.warn('Error fetching logs:', err);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  // Fetch logs on mount
+  useEffect(() => {
+    fetchTodayLogs();
+  }, []);
 
   const bookOptions = [
     'The Bible',
@@ -36,15 +70,41 @@ export default function ReadingLog({ onLogAdded }: ReadingLogProps) {
       const finalBookTitle = bookTitle === 'Other' && customBook ? customBook : bookTitle;
       const today = new Date().toISOString().split('T')[0];
 
-      // Insert reading log
-      const { error: insertError } = await insertReadingLog({
+      // Create a temporary ID for optimistic UI
+      const tempId = `temp-${Date.now()}`;
+      const newLogEntry: ReadingLogEntry = {
+        id: tempId,
+        book_title: finalBookTitle,
+        chapters_read: chaptersRead,
+        key_learning: keyLearning,
+        date: today,
+        created_at: new Date().toISOString()
+      };
+
+      // Optimistically add to recent logs immediately
+      setRecentLogs(prev => [newLogEntry, ...prev]);
+
+      // Insert reading log with proper user_id
+      const { data: insertedData, error: insertError } = await insertReadingLog({
+        user_id: HARDCODED_USER_ID,
         book_title: finalBookTitle,
         chapters_read: chaptersRead,
         key_learning: keyLearning,
         date: today
       });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Remove optimistic update on error
+        setRecentLogs(prev => prev.filter(log => log.id !== tempId));
+        throw new Error(insertError.message || 'Failed to save reading log');
+      }
+
+      // Replace temp entry with real data from DB
+      if (insertedData) {
+        setRecentLogs(prev => prev.map(log => 
+          log.id === tempId ? insertedData[0] as ReadingLogEntry : log
+        ));
+      }
 
       // Update scripture chapters count in daily_summaries
       if (bookTitle === 'The Bible') {
@@ -167,6 +227,56 @@ export default function ReadingLog({ onLogAdded }: ReadingLogProps) {
           {isSaving ? 'Saving...' : '📖 Log Progress'}
         </button>
       </form>
+
+      {/* Recent Logs Section */}
+      <div className="mt-6 pt-6 border-t border-dark-border">
+        <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+          📝 Today's Logs
+        </h4>
+        
+        {isLoadingLogs ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-16 bg-gray-800/50 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ) : recentLogs.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-4">
+            No reading logs yet today. Start reading and log your progress!
+          </p>
+        ) : (
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {recentLogs.map((log) => (
+              <div 
+                key={log.id} 
+                className="p-3 bg-gray-800/30 rounded-lg border border-dark-border/50 hover:border-dark-border transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium truncate">
+                      {log.book_title}
+                    </p>
+                    <p className="text-accent-success text-sm">
+                      {log.chapters_read} {log.chapters_read === 1 ? 'Chapter' : 'Chapters'}
+                    </p>
+                  </div>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(log.created_at).toLocaleTimeString('en-US', { 
+                      hour: 'numeric', 
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+                {log.key_learning && (
+                  <p className="text-gray-400 text-sm mt-2 line-clamp-2">
+                    "{log.key_learning}"
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

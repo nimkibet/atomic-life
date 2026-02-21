@@ -156,6 +156,7 @@ export async function getRecentSummaries(days: number = 30) {
  * Insert a reading log for the hardcoded user
  */
 export async function insertReadingLog(log: {
+  user_id?: string;
   book_title: string;
   chapters_read: number;
   key_learning: string;
@@ -165,8 +166,11 @@ export async function insertReadingLog(log: {
   return supabase
     .from('reading_logs')
     .insert({
-      user_id: HARDCODED_USER_ID,
-      ...log
+      user_id: log.user_id || HARDCODED_USER_ID,
+      book_title: log.book_title,
+      chapters_read: log.chapters_read,
+      key_learning: log.key_learning,
+      date: log.date
     })
     .select()
     .single();

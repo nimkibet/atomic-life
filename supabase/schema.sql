@@ -146,10 +146,39 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- 6. READING_LOGS TABLE
+CREATE TABLE IF NOT EXISTS reading_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  book_title TEXT NOT NULL,
+  chapters_read INTEGER NOT NULL DEFAULT 1,
+  key_learning TEXT,
+  date DATE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, date, book_title)
+);
+
+-- ENABLE ROW LEVEL SECURITY FOR READING_LOGS
+ALTER TABLE reading_logs ENABLE ROW LEVEL SECURITY;
+
+-- READING_LOGS POLICIES
+CREATE POLICY "Users can view own reading logs" ON reading_logs
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can create own reading logs" ON reading_logs
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own reading logs" ON reading_logs
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own reading logs" ON reading_logs
+  FOR DELETE USING (auth.uid() = user_id);
+
 -- INDEXES FOR PERFORMANCE
 CREATE INDEX idx_habit_logs_user_date ON habit_logs(user_id, date);
 CREATE INDEX idx_daily_summaries_user_date ON daily_summaries(user_id, date);
 CREATE INDEX idx_streaks_user_type ON streaks(user_id, streak_type);
+CREATE INDEX idx_reading_logs_user_date ON reading_logs(user_id, date);
 
 -- ADD NEW COLUMNS TO EXISTING TABLE (if table already exists)
 -- Run these only if you already have the table and need to add new columns:

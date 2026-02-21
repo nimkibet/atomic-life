@@ -55,19 +55,28 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
     fetchData();
   }, [fetchData]);
 
-  // Color coding for the grid cells
+  // Color coding for the grid cells - GitHub-style contribution graph
   const getCellColor = (rating: string | null, isMeetingMode: boolean): string => {
     if (isMeetingMode) return 'bg-accent-info/60';
     
+    // GitHub-style contribution graph colors:
+    // Level 0 (Empty): bg-gray-800/80 or bg-slate-800
+    // Level 1 (Low Activity): bg-emerald-900/60
+    // Level 2 (Medium Activity): bg-emerald-600  
+    // Level 3+ (High Activity): bg-emerald-400
     switch (rating) {
       case 'perfect':
-        return 'bg-accent-success';
+        // High activity - bright emerald
+        return 'bg-emerald-400';
       case 'partial':
-        return 'bg-accent-success/40';
+        // Medium activity - medium emerald
+        return 'bg-emerald-600';
       case 'missed':
-        return 'bg-dark-border';
+        // Low activity - dark emerald (but visible)
+        return 'bg-emerald-900/60';
       default:
-        return 'bg-dark-bg border border-dark-border';
+        // Empty - dark gray (visible against background)
+        return 'bg-gray-800/80';
     }
   };
 
@@ -100,8 +109,9 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         <div className="flex items-center gap-2 text-xs text-gray-400">
           <span>Less</span>
           <div className="flex gap-1">
-            <div className="w-3 h-3 rounded-sm bg-accent-success/40" title="Partial" />
-            <div className="w-3 h-3 rounded-sm bg-accent-success" title="Perfect" />
+            <div className="w-3 h-3 rounded-sm bg-emerald-900/60" title="Missed" />
+            <div className="w-3 h-3 rounded-sm bg-emerald-600" title="Partial" />
+            <div className="w-3 h-3 rounded-sm bg-emerald-400" title="Perfect" />
             <div className="w-3 h-3 rounded-sm bg-accent-info/60" title="Meeting Mode" />
           </div>
           <span>More</span>

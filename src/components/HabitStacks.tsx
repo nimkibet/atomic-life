@@ -170,21 +170,35 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       const currentValue = summary[column];
       const newValue = !currentValue;
 
-      // Optimistically update local state
-      setSummary(prev => prev ? {
-        ...prev,
-        [column]: newValue
-      } : null);
-
       // Determine which stack this habit belongs to
       const isMorning = morningHabits.some(h => h.id === habitId);
       const isEvening = eveningHabits.some(h => h.id === habitId);
 
-      // Check if entire stack is now complete
-      const morningComplete = isMorning ? isStackComplete('morning') : summary.morning_stack_complete;
-      const eveningComplete = isEvening ? isStackComplete('evening') : summary.evening_stack_complete;
+      // Calculate what the new summary would look like with the toggle applied
+      const updatedSummary = {
+        ...summary,
+        [column]: newValue
+      };
 
-      // Upsert to database
+      // Check if entire stack is now complete based on the NEW state
+      const checkMorningComplete = (s: typeof summary) => 
+        s && s.face_washed && s.phone_plugged_in && s.gym_exercise && s.meditation;
+      const checkEveningComplete = (s: typeof summary) => 
+        s && s.bible_read && s.laptop_shutdown;
+
+      // Only set stack complete to true if ALL items are checked (100% progress)
+      // If unchecking any item, set stack complete to false
+      const morningComplete = isMorning 
+        ? checkMorningComplete(updatedSummary) 
+        : summary.morning_stack_complete;
+      const eveningComplete = isEvening 
+        ? checkEveningComplete(updatedSummary) 
+        : summary.evening_stack_complete;
+
+      // Optimistically update local state
+      setSummary(updatedSummary);
+
+      // Upsert to database (only mark stack complete when 100% achieved)
       const { error } = await supabase
         .from('daily_summaries')
         .upsert({
