@@ -25,24 +25,75 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
 
   const fetchData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        ?.from('daily_summaries')
-        .select('*')
-        .eq('user_id', HARDCODED_USER_ID)
-        .order('date', { ascending: true }) || { data: null, error: null };
+      // Fetch from both daily_summaries and reading_logs
+      const [summariesRes, logsRes] = await Promise.all([
+        supabase
+          ?.from('daily_summaries')
+          .select('*')
+          .eq('user_id', HARDCODED_USER_ID)
+          .order('date', { ascending: true }) || { data: null, error: null },
+        supabase
+          ?.from('reading_logs')
+          .select('date')
+          .eq('user_id', HARDCODED_USER_ID) || { data: null, error: null }
+      ]);
 
-      if (error) {
-        console.warn('Error fetching progress:', error.message);
+      if (summariesRes.error) {
+        console.warn('Error fetching summaries:', summariesRes.error.message);
+      }
+      if (logsRes.error) {
+        console.warn('Error fetching reading logs:', logsRes.error.message);
       }
 
-      // Map directly over fetched data - no filler
-      const mappedData: DayData[] = (data || []).map(summary => ({
-        date: summary.date,
-        rating: summary.day_rating as 'perfect' | 'partial' | 'missed' | null,
-        meetingMode: summary.meeting_mode || false
-      }));
+      // Create an array of dates that have reading logs
+      const readingLogDates: string[] = (logsRes.data || []).map(log => log.date);
 
-      setGridData(mappedData);
+      // Map daily summaries data
+      const summariesMap: Record<string, DayData> = {};
+      (summariesRes.data || []).forEach(summary => {
+        summariesMap[summary.date] = {
+          date: summary.date,
+          rating: summary.day_rating as 'perfect' | 'partial' | 'missed' | null,
+          meetingMode: summary.meeting_mode || false
+        };
+      });
+
+      // Combine: add dates that only have reading logs (no habit data)
+      // If a date has reading log but no habit data, mark as 'partial' so it lights up
+      // Using a simple array approach to avoid Set iteration issues
+      const dateKeys = Object.keys(summariesMap);
+      const allDates: string[] = [];
+      const seen = new Map<string, boolean>();
+      
+      for (let i = 0; i < dateKeys.length; i++) {
+        const d = dateKeys[i];
+        if (!seen.get(d)) {
+          allDates.push(d);
+          seen.set(d, true);
+        }
+      }
+      for (let i = 0; i < readingLogDates.length; i++) {
+        const d = readingLogDates[i];
+        if (!seen.get(d)) {
+          allDates.push(d);
+          seen.set(d, true);
+        }
+      }
+
+      const combinedData: DayData[] = Array.from(allDates).sort().map(date => {
+        // If we have summary data, use it
+        if (summariesMap[date]) {
+          return summariesMap[date];
+        }
+        // If only reading log exists (no habit data), mark as 'partial' to light up
+        return {
+          date,
+          rating: 'partial' as const,
+          meetingMode: false
+        };
+      });
+
+      setGridData(combinedData);
     } catch (err) {
       console.warn('Error fetching progress:', err);
       setGridData([]);

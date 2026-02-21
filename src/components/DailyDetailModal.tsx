@@ -176,9 +176,9 @@ export default function DailyDetailModal({ date, onClose }: DailyDetailModalProp
                 </div>
               </div>
 
-              {/* Scripture Reading */}
+              {/* Studies Reading */}
               <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-white">📖 Scripture</h3>
+                <h3 className="text-lg font-semibold text-white">📖 Studies</h3>
                 {readingLogs.length > 0 ? (
                   <div className="space-y-2">
                     {readingLogs.map((log, index) => (

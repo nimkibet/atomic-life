@@ -299,14 +299,14 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
                 >
                   <input
                     type="checkbox"
-                    checked={isChecked}
+                    checked={!!isChecked}
                     onChange={() => toggleHabit(habit.id)}
                     disabled={isUpdating}
                     className="w-6 h-6 rounded border-gray-600 bg-gray-700 
                       text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg cursor-pointer"
                   />
                   <span className="text-xl">{habit.emoji}</span>
-                  <span className={`text-white ${isChecked ? 'line-through opacity-60' : ''}`}>
+                  <span className={`text-white ${!!isChecked ? 'line-through opacity-60' : ''}`}>
                     {habit.label}
                   </span>
                 </label>
@@ -343,14 +343,14 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
                 >
                   <input
                     type="checkbox"
-                    checked={isChecked}
+                    checked={!!isChecked}
                     onChange={() => toggleHabit(habit.id)}
                     disabled={isUpdating}
                     className="w-6 h-6 rounded border-gray-600 bg-gray-700 
                       text-accent-success focus:ring-accent-success focus:ring-offset-dark-bg cursor-pointer"
                   />
                   <span className="text-xl">{habit.emoji}</span>
-                  <span className={`text-white ${isChecked ? 'line-through opacity-60' : ''}`}>
+                  <span className={`text-white ${!!isChecked ? 'line-through opacity-60' : ''}`}>
                     {habit.label}
                   </span>
                 </label>
