@@ -7,11 +7,37 @@ interface DayData {
   date: string;
   rating: 'perfect' | 'partial' | 'missed' | null;
   meetingMode: boolean;
+  morningStackComplete: boolean;
+  eveningStackComplete: boolean;
+  hasReadingLog: boolean;
 }
 
 interface ProgressGridProps {
   onSelectDate?: (date: Date) => void;
 }
+
+// Helper: Normalize a date to YYYY-MM-DD string (timezone-aware, ignoring time)
+const normalizeToYYYYMMDD = (date: Date | string): string => {
+  if (typeof date === 'string') {
+    // Already a string, just return it if it matches YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+    // Try to parse it
+    const d = new Date(date);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return date;
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 /**
  * ProgressGrid Component - Visual Review (GitHub-style contribution graph)
@@ -25,7 +51,8 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
 
   const fetchData = useCallback(async () => {
     try {
-      // Fetch from both daily_summaries and reading_logs
+      // CRITICAL: Explicitly query BOTH daily_summaries and reading_logs
+      // with explicit user_id filter for single-player mode
       const [summariesRes, logsRes] = await Promise.all([
         supabase
           ?.from('daily_summaries')
@@ -45,41 +72,38 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         console.warn('Error fetching reading logs:', logsRes.error.message);
       }
 
-      // Create an array of dates that have reading logs
-      const readingLogDates: string[] = (logsRes.data || []).map(log => log.date);
+      // CRITICAL: Bulletproof date normalization - convert all dates to YYYY-MM-DD strings
+      // Supabase returns dates as strings (e.g., '2026-02-21'), normalize them properly
+      
+      // Create a Set of dates that have reading logs (normalized to YYYY-MM-DD)
+      const readingLogDatesSet = new Set<string>();
+      (logsRes.data || []).forEach(log => {
+        const normalizedDate = normalizeToYYYYMMDD(log.date);
+        readingLogDatesSet.add(normalizedDate);
+      });
 
-      // Map daily summaries data
+      // Map daily summaries data with normalized dates and track completion status
       const summariesMap: Record<string, DayData> = {};
       (summariesRes.data || []).forEach(summary => {
-        summariesMap[summary.date] = {
-          date: summary.date,
+        // CRITICAL: Normalize the date from database (YYYY-MM-DD string)
+        const normalizedDate = normalizeToYYYYMMDD(summary.date);
+        
+        summariesMap[normalizedDate] = {
+          date: normalizedDate,
           rating: summary.day_rating as 'perfect' | 'partial' | 'missed' | null,
-          meetingMode: summary.meeting_mode || false
+          meetingMode: summary.meeting_mode || false,
+          morningStackComplete: summary.morning_stack_complete || false,
+          eveningStackComplete: summary.evening_stack_complete || false,
+          hasReadingLog: readingLogDatesSet.has(normalizedDate)
         };
       });
 
       // Combine: add dates that only have reading logs (no habit data)
       // If a date has reading log but no habit data, mark as 'partial' so it lights up
-      // Using a simple array approach to avoid Set iteration issues
-      const dateKeys = Object.keys(summariesMap);
-      const allDates: string[] = [];
-      const seen = new Map<string, boolean>();
+      const allDatesSet = new Set<string>(Object.keys(summariesMap));
+      readingLogDatesSet.forEach(d => allDatesSet.add(d));
+      const allDates = Array.from(allDatesSet);
       
-      for (let i = 0; i < dateKeys.length; i++) {
-        const d = dateKeys[i];
-        if (!seen.get(d)) {
-          allDates.push(d);
-          seen.set(d, true);
-        }
-      }
-      for (let i = 0; i < readingLogDates.length; i++) {
-        const d = readingLogDates[i];
-        if (!seen.get(d)) {
-          allDates.push(d);
-          seen.set(d, true);
-        }
-      }
-
       const combinedData: DayData[] = Array.from(allDates).sort().map(date => {
         // If we have summary data, use it
         if (summariesMap[date]) {
@@ -89,11 +113,34 @@ export default function ProgressGrid({ onSelectDate }: ProgressGridProps) {
         return {
           date,
           rating: 'partial' as const,
-          meetingMode: false
+          meetingMode: false,
+          morningStackComplete: false,
+          eveningStackComplete: false,
+          hasReadingLog: true
         };
       });
 
-      setGridData(combinedData);
+      // CRITICAL: Dynamic stats calculation based on merged data
+      // - Perfect: Any day where the daily_summaries row shows all habit stacks as complete
+      // - Partial: Any day that has at least one completed habit stack OR at least one entry in reading_logs
+      const calculatedData = combinedData.map(day => {
+        // Check if this is a "perfect" day
+        const isPerfect = day.morningStackComplete && day.eveningStackComplete;
+        
+        // Check if this is a "partial" day:
+        // - Has at least one completed habit stack OR
+        // - Has at least one reading log entry
+        const hasPartialHabit = day.morningStackComplete || day.eveningStackComplete;
+        const isPartial = hasPartialHabit || day.hasReadingLog;
+        
+        return {
+          ...day,
+          // Override rating based on dynamic calculation
+          rating: isPerfect ? 'perfect' as const : (isPartial ? 'partial' as const : (day.rating || 'missed' as const))
+        };
+      });
+
+      setGridData(calculatedData);
     } catch (err) {
       console.warn('Error fetching progress:', err);
       setGridData([]);

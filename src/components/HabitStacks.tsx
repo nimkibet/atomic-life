@@ -64,7 +64,16 @@ const getInitialState = (): HabitState => ({
  * HabitStacks Component - Individual habit checkboxes with localStorage persistence
  */
 export default function HabitStacks({ onUpdate }: HabitStacksProps) {
-  const today = new Date().toISOString().split('T')[0];
+  // Get today's date as YYYY-MM-DD string (timezone-aware)
+  const getTodayDate = (): string => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const today = getTodayDate();
 
   // Initialize with false to prevent Next.js hydration mismatch
   const [habitState, setHabitState] = useState<HabitState>(getInitialState);
@@ -256,6 +265,7 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
   };
 
   // Mark stack as complete in database when 100% is reached
+  // CRITICAL: Must include ALL primary keys (user_id AND date) for upsert to work
   const markStackComplete = async (stack: 'morning' | 'evening') => {
     if (!supabase || !dbSummary) return;
     
@@ -266,13 +276,15 @@ export default function HabitStacks({ onUpdate }: HabitStacksProps) {
       updates.evening_stack_complete = true;
     }
 
+    // CRITICAL FIX: Explicitly include primary keys (user_id AND date) in upsert payload
+    // Supabase needs both to know which row to update/create
     await supabase
       .from('daily_summaries')
       .upsert({
         user_id: HARDCODED_USER_ID,
         date: today,
-        id: dbSummary.id,
-        ...updates,
+        morning_stack_complete: stack === 'morning' ? true : dbSummary.morning_stack_complete,
+        evening_stack_complete: stack === 'evening' ? true : dbSummary.evening_stack_complete,
       }, { onConflict: 'user_id,date' })
       .select()
       .single();
